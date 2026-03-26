@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Booking History - Smart Parking Admin</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.4/css/dataTables.bootstrap5.min.css">
+
+    <style>
+        body {
+            background-color: #f1f5f9;
+            font-family: 'Kanit', sans-serif;
+        }
+
+        .navbar {
+            background: #1e293b !important;
+            min-height: 65px;
+        }
+
+        .card {
+            border-radius: 20px;
+            border: none;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+
+        .badge-slot {
+            background-color: #e0e7ff;
+            color: #4338ca;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .booking-id {
+            color: #e11d48;
+            font-weight: 700;
+        }
+
+        .table thead th {
+            background-color: #f8fafc;
+            color: #64748b;
+            font-weight: 600;
+            border-bottom: 2px solid #edf2f7;
+        }
+    </style>
+</head>
+
+<body>
+
+    <nav class="navbar navbar-dark shadow-lg mb-4">
+        <div class="container-fluid px-4">
+            <span class="navbar-brand fw-bold">
+                <i class="fa-solid fa-clock-rotate-left text-info me-2"></i>
+                <span id="nav-title">ประวัติการจองรถทั้งหมด</span>
+            </span>
+            <div class="d-flex align-items-center">
+                <div class="dropdown me-3">
+                    <button class="btn btn-outline-info btn-sm dropdown-toggle rounded-pill px-3" type="button"
+                        data-bs-toggle="dropdown">
+                        <i class="fa-solid fa-earth-americas me-1"></i> <span id="current-lang">Language</span>
+                    </button>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item lang-btn" onclick="changeLang('th')">🇹🇭 ภาษาไทย</a></li>
+                        <li><a class="dropdown-item lang-btn" onclick="changeLang('en')">🇺🇸 English</a></li>
+                        <li><a class="dropdown-item lang-btn" onclick="changeLang('cn')">🇨🇳 中文</a></li>
+                    </ul>
+                </div>
+                <a href="admin.html" class="btn btn-outline-light btn-sm rounded-pill px-4" id="btn-back">
+                    <i class="fa-solid fa-arrow-left me-2"></i>กลับหน้าจัดการ
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid px-4 pb-5">
+        <div class="card p-4 shadow-sm">
+            <h4 class="fw-bold mb-4" id="table-title">รายการบันทึกข้อมูลย้อนหลัง</h4>
+            <div class="table-responsive">
+                <table id="historyTable" class="table table-hover align-middle" style="width:100%">
+                    <thead>
+                        <tr>
+                            <th id="th-date">วันที่</th>
+                            <th id="th-time">เวลา</th>
+                            <th id="th-slot">ช่องจอด</th>
+                            <th id="th-car">เลขทะเบียนรถ</th>
+                            <th id="th-email">อีเมลผู้จอง</th>
+                            <th id="th-code">รหัสการจอง</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-body"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap5.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyCUBzXNuOni3jB8qLXDlbySY69TNcIUuyg",
+            authDomain: "smart-parking-iot-fd3c3.firebaseapp.com",
+            databaseURL: "https://smart-parking-iot-fd3c3-default-rtdb.asia-southeast1.firebasedatabase.app/",
+            projectId: "smart-parking-iot-fd3c3",
+            storageBucket: "smart-parking-iot-fd3c3.firebasestorage.app",
+            messagingSenderId: "128328064605",
+            appId: "1:128328064605:web:dabad467fa1cfbf83b77b4"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        const translations = {
+            th: {
+                navTitle: "ประวัติการจองรถทั้งหมด", btnBack: "กลับหน้าจัดการ", tableTitle: "รายการบันทึกข้อมูลย้อนหลัง",
+                thDate: "วันที่", thTime: "เวลา", thSlot: "ช่องจอด", thCar: "เลขทะเบียนรถ", thEmail: "อีเมลผู้จอง", thCode: "รหัสการจอง",
+                search: "ค้นหา:", lengthMenu: "แสดง _MENU_ แถว"
+            },
+            en: {
+                navTitle: "Booking History", btnBack: "Back", tableTitle: "Booking Records",
+                thDate: "Date", thTime: "Time", thSlot: "Slot", thCar: "License Plate", thEmail: "Email", thCode: "Code",
+                search: "Search:", lengthMenu: "Show _MENU_ entries"
+            },
+            cn: {
+                navTitle: "预订历史", btnBack: "返回", tableTitle: "历史记录",
+                thDate: "日期", thTime: "时间", thSlot: "车位", thCar: "车牌号", thEmail: "邮箱", thCode: "代码",
+                search: "搜索:", lengthMenu: "显示 _MENU_ 项"
+            }
+        };
+
+        let dataTable = $('#historyTable').DataTable({
+            "order": [[0, "desc"], [1, "desc"]]
+        });
+
+        function changeLang(lang) {
+            const t = translations[lang];
+            localStorage.setItem('selectedLang', lang);
+
+            document.getElementById('nav-title').innerText = t.navTitle;
+            document.getElementById('btn-back').innerHTML = `<i class="fa-solid fa-arrow-left me-2"></i>${t.btnBack}`;
+            document.getElementById('table-title').innerText = t.tableTitle;
+            document.getElementById('th-date').innerText = t.thDate;
+            document.getElementById('th-time').innerText = t.thTime;
+            document.getElementById('th-slot').innerText = t.thSlot;
+            document.getElementById('th-car').innerText = t.thCar;
+            document.getElementById('th-email').innerText = t.thEmail;
+            document.getElementById('th-code').innerText = t.thCode;
+            document.getElementById('current-lang').innerText = lang.toUpperCase();
+
+            loadHistoryData(lang);
+        }
+
+        function loadHistoryData(lang) {
+            db.ref('booking_history').on('value', (snapshot) => {
+                const historyData = snapshot.val();
+                dataTable.clear();
+
+                if (historyData) {
+                    Object.keys(historyData).forEach(key => {
+                        const item = historyData[key];
+                        dataTable.row.add([
+                            item.date || "-",
+                            item.timestamp || "-",
+                            `<span class="badge badge-slot px-3 py-2 rounded-pill">${(item.slot || "N/A").toUpperCase().replace('_', ' ')}</span>`,
+                            `<b>${item.car_id || "-"}</b>`,
+                            `<small class="text-muted">${item.user_email || "-"}</small>`,
+                            `<span class="booking-id">${item.booking_code || "-"}</span>`
+                        ]);
+                    });
+                }
+                dataTable.draw();
+            });
+        }
+
+        $(document).ready(function () {
+            const savedLang = localStorage.getItem('selectedLang') || 'th';
+            changeLang(savedLang);
+        });
+
+        firebase.auth().onAuthStateChanged(user => {
+            if (!user) window.location.href = "login.html";
+        });
+    </script>
+</body>
+
+</html>

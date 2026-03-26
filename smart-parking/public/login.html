@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <title>Smart Parking - Login & Access</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        :root {
+            --login-bg: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --register-bg: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+        }
+
+        body { 
+            height: 100vh; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            font-family: 'Kanit', sans-serif; 
+            transition: 0.5s ease;
+            background: var(--login-bg);
+            margin: 0;
+        }
+
+        body.reg-mode { background: var(--register-bg); }
+
+        .auth-card { 
+            background: white; 
+            border-radius: 24px; 
+            padding: 50px 40px; 
+            box-shadow: 0 20px 60px rgba(0,0,0,0.2); 
+            width: 100%; 
+            max-width: 420px; 
+            transition: 0.3s;
+        }
+
+        .icon-circle {
+            width: 80px;
+            height: 80px;
+            background: #f8f9fa;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px;
+            font-size: 30px;
+            color: #667eea;
+            transition: 0.5s;
+        }
+
+        body.reg-mode .icon-circle { color: #11998e; transform: rotateY(360deg); }
+
+        .form-control {
+            border-radius: 12px;
+            padding: 12px 15px;
+            background-color: #f8f9fa;
+            border: 1px solid #eee;
+        }
+
+        .form-control:focus {
+            box-shadow: none;
+            border-color: #667eea;
+            background-color: white;
+        }
+
+        .btn-action {
+            border-radius: 12px;
+            padding: 12px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            transition: 0.3s;
+            border: none;
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-action:hover { opacity: 0.9; transform: translateY(-2px); color: white; }
+        
+        body.reg-mode .btn-action { background: #11998e; }
+
+        .toggle-link {
+            text-decoration: none;
+            font-weight: 600;
+            color: #667eea;
+            cursor: pointer;
+        }
+        body.reg-mode .toggle-link { color: #11998e; }
+    </style>
+</head>
+<body id="main-body">
+
+<div class="auth-card text-center">
+    <div class="icon-circle shadow-sm">
+        <i id="main-icon" class="fa-solid fa-lock"></i>
+    </div>
+    
+    <h3 class="fw-bold mb-2" id="auth-title">ยินดีต้อนรับ</h3>
+    <p class="text-muted mb-4 small" id="auth-subtitle">โปรดลงชื่อเข้าใช้งานระบบ Smart Parking</p>
+
+    <div class="text-start">
+        <div class="mb-3">
+            <label class="form-label small fw-bold">อีเมลผู้ใช้งาน</label>
+            <div class="input-group">
+                <span class="input-group-text border-0 bg-transparent"><i class="fa-regular fa-envelope text-muted"></i></span>
+                <input type="email" id="email" class="form-control border-start-0 ps-0" placeholder="example@mail.com">
+            </div>
+        </div>
+        
+        <div class="mb-4">
+            <label class="form-label small fw-bold">รหัสผ่าน</label>
+            <div class="input-group">
+                <span class="input-group-text border-0 bg-transparent"><i class="fa-solid fa-key text-muted"></i></span>
+                <input type="password" id="pass" class="form-control border-start-0 ps-0" placeholder="••••••••">
+            </div>
+        </div>
+        
+        <button id="btn-action" class="btn btn-action w-100 mb-3 shadow">เข้าสู่ระบบ</button>
+    </div>
+
+    <div id="switch-text" class="small mt-3">
+        <span id="label-switch">ยังไม่มีบัญชีใช่หรือไม่?</span> 
+        <a class="toggle-link" onclick="toggleMode()">สมัครสมาชิกที่นี่</a>
+    </div>
+</div>
+
+<script>
+    // อัปเดต API Key เป็นโปรเจกต์ fd3c3
+    const firebaseConfig = {
+        apiKey: "AIzaSyCUBzXNuOni3jB8qLXDlbySY69TNcIUuyg",
+        authDomain: "smart-parking-iot-fd3c3.firebaseapp.com",
+        databaseURL: "https://smart-parking-iot-fd3c3-default-rtdb.asia-southeast1.firebasedatabase.app",
+        projectId: "smart-parking-iot-fd3c3",
+        storageBucket: "smart-parking-iot-fd3c3.firebasestorage.app",
+        messagingSenderId: "128328064605",
+        appId: "1:128328064605:web:dabad467fa1cfbf83b77b4",
+        measurementId: "G-VLCBWDV2DK"
+    };
+    firebase.initializeApp(firebaseConfig);
+
+    let isRegisterMode = false;
+    const adminEmail = "admin@gmail.com";
+
+    function toggleMode() {
+        isRegisterMode = !isRegisterMode;
+        const body = document.getElementById('main-body');
+        const title = document.getElementById('auth-title');
+        const subtitle = document.getElementById('auth-subtitle');
+        const btn = document.getElementById('btn-action');
+        const icon = document.getElementById('main-icon');
+        const label = document.getElementById('label-switch');
+        const link = document.querySelector('.toggle-link');
+
+        if (isRegisterMode) {
+            body.classList.add('reg-mode');
+            title.innerText = "เริ่มใช้งานวันนี้";
+            subtitle.innerText = "สร้างบัญชีใหม่เพื่อเริ่มจองที่จอดรถของคุณ";
+            btn.innerText = "สร้างบัญชีผู้ใช้";
+            icon.className = "fa-solid fa-user-plus";
+            label.innerText = "มีบัญชีอยู่แล้ว?";
+            link.innerText = " เข้าสู่ระบบ";
+        } else {
+            body.classList.remove('reg-mode');
+            title.innerText = "ยินดีต้อนรับ";
+            subtitle.innerText = "โปรดลงชื่อเข้าใช้งานระบบ Smart Parking";
+            btn.innerText = "เข้าสู่ระบบ";
+            icon.className = "fa-solid fa-lock";
+            label.innerText = "ยังไม่มีบัญชีใช่หรือไม่?";
+            link.innerText = " สมัครสมาชิกที่นี่";
+        }
+    }
+
+    document.getElementById('btn-action').onclick = function() {
+        const email = document.getElementById('email').value;
+        const pass = document.getElementById('pass').value;
+        
+        if(!email || !pass) {
+            alert("กรุณากรอกข้อมูลให้ครบถ้วน");
+            return;
+        }
+
+        if(isRegisterMode) {
+            firebase.auth().createUserWithEmailAndPassword(email, pass)
+                .then(() => alert("สมัครสมาชิกสำเร็จ! กำลังเข้าสู่ระบบ..."))
+                .catch(err => alert("ผิดพลาด: " + err.message));
+        } else {
+            firebase.auth().signInWithEmailAndPassword(email, pass)
+                .catch(err => alert("อีเมลหรือรหัสผ่านไม่ถูกต้อง"));
+        }
+    };
+
+    firebase.auth().onAuthStateChanged(user => {
+        if (user) {
+            // เช็คสิทธิ์และ Redirect ไปยังหน้าที่กำหนด
+            if (user.email === adminEmail) { 
+                window.location.href = "admin.html"; 
+            } else { 
+                window.location.href = "index.html"; 
+            }
+        }
+    });
+</script>
+</body>
+</html>

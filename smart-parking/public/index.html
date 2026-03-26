@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Smart Parking - ระบบจองที่จอดรถ & แจ้งเตือนแก๊ส</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        :root {
+            --primary: #4361ee;
+            --success: #2ecc71;
+            --danger: #e74c3c;
+            --warning: #f1c40f;
+        }
+
+        body {
+            background: #ebf0f6;
+            font-family: 'Kanit', sans-serif;
+            color: #080808;
+            transition: background-color 0.5s ease;
+        }
+
+        body.gas-danger {
+            background-color: #ffcccc !important;
+        }
+
+        .navbar {
+            background: rgb(22, 30, 41);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            padding: 0.8rem 1rem;
+        }
+
+        .nav-link {
+            color: rgba(255, 255, 255, 0.8) !important;
+        }
+
+        .nav-link:hover {
+            color: var(--primary) !important;
+        }
+
+        .dropdown-menu {
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        }
+
+        .parking-card {
+            border-radius: 20px;
+            border: none;
+            background: white;
+            transition: 0.3s;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.05);
+        }
+
+        .parking-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        .status-available {
+            color: var(--success);
+        }
+
+        .status-occupied {
+            color: var(--danger);
+        }
+
+        .status-booked {
+            color: var(--warning);
+        }
+
+        .booking-banner {
+            background: linear-gradient(135deg, var(--primary), #3f37c9);
+            color: white;
+            border-radius: 25px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        #nav-profile-img {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid #5ae7d9;
+            background: white;
+        }
+
+        .animate-pulse-red {
+            animation: pulse-red 1s infinite;
+        }
+
+        @keyframes pulse-red {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.1); opacity: 0.7; color: #ff0000; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .creator-info {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-left: 5px solid var(--primary);
+        }
+    </style>
+</head>
+
+<body>
+    <audio id="alarm-sound" loop>
+        <source src="https://www.soundjay.com/buttons/beep-01a.mp3" type="audio/mpeg">
+    </audio>
+
+    <nav class="navbar navbar-expand-lg sticky-top mb-4">
+        <div class="container">
+            <a class="navbar-brand fw-bold text-white d-flex align-items-center" href="#">
+                <i class="fa-solid fa-square-p me-2 fs-2 text-primary"></i>
+                <span id="txt-logo"><h1>Smart Parking</h1></span>
+            </a>
+
+            <button class="navbar-toggler btn-light" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <i class="fa-solid fa-bars text-white"></i>
+            </button>
+
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                    <li class="nav-item">
+                        <a class="nav-link" href="javascript:void(0)" data-bs-toggle="modal" data-bs-target="#creatorModal">
+                            <i class="fa-solid fa-users me-1"></i> <span id="nav-creators">ผู้จัดทำ</span>
+                        </a>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="nav-lang-link" role="button" data-bs-toggle="dropdown">
+                            <i class="fa-solid fa-earth-americas me-1"></i> <span id="nav-lang">ภาษา</span>
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="javascript:void(0)" onclick="changeLang('th')">🇹🇭 ภาษาไทย</a></li>
+                            <li><a class="dropdown-item" href="javascript:void(0)" onclick="changeLang('en')">🇺🇸 English</a></li>
+                            <li><a class="dropdown-item" href="javascript:void(0)" onclick="changeLang('cn')">🇨🇳 中文</a></li>
+                        </ul>
+                    </li>
+                </ul>
+
+                <div class="d-flex align-items-center">
+                    <a href="profile.html" class="btn btn-outline-info btn-sm px-3 me-2 d-flex align-items-center text-white" style="border-radius: 12px; border: 1px solid #5ae7d9;">
+                        <img id="nav-profile-img" src="https://via.placeholder.com/32" class="me-2">
+                        <span class="small fw-bold" id="btn-profile">โปรไฟล์</span>
+                    </a>
+                    <button class="btn btn-outline-danger btn-sm px-3" style="border-radius: 10px;" onclick="logout()" id="btn-logout">ออกจากระบบ</button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container pb-5 text-center">
+        <div class="mb-4">
+            <h3 class="fw-bold" id="main-title">ระบบจองที่จอดรถออนไลน์</h3>
+            <p id="user-info" class="text-muted small">กำลังโหลดข้อมูลผู้ใช้...</p>
+        </div>
+
+        <div id="my-booking-status" style="display:none;">
+            <div class="booking-banner shadow-sm text-start">
+                <div class="row text-center align-items-center">
+                    <div class="col-md-3 border-end border-white border-opacity-25 mb-3 mb-md-0">
+                        <small class="opacity-75 d-block" id="lbl-my-slot">ช่องจอดที่จอง</small>
+                        <span id="my-slot" class="h3 fw-bold">-</span>
+                    </div>
+                    <div class="col-md-3 border-end border-white border-opacity-25 mb-3 mb-md-0">
+                        <small class="opacity-75 d-block" id="lbl-my-code">รหัส Booking Code</small>
+                        <span id="my-code" class="h3 fw-bold text-warning">-</span>
+                    </div>
+                    <div class="col-md-3 border-end border-white border-opacity-25">
+                        <small class="opacity-75 d-block" id="lbl-my-car">ทะเบียนรถ</small>
+                        <span id="my-car-id" class="h4 fw-bold">-</span>
+                    </div>
+                    <div class="col-md-3">
+                        <small class="opacity-75 d-block" id="lbl-my-arrival">เวลาที่จะมาถึง</small>
+                        <span id="my-arrival-time" class="h4 fw-bold">-</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-4 justify-content-center mb-5" id="parking-container"></div>
+
+        <div id="gas-alert-container" style="display:none;" class="mb-5">
+            <div class="alert alert-danger d-flex align-items-center p-4 shadow-lg" role="alert" style="border-radius: 15px;">
+                <i class="fa-solid fa-triangle-exclamation fa-4x me-4 animate-pulse-red"></i>
+                <div class="text-start">
+                    <h2 class="alert-heading fw-bold" id="gas-title">!! ตรวจพบอันตราย !!</h2>
+                    <p class="h5 mb-0" id="gas-msg">ระบบตรวจพบแก๊สรั่วในบริเวณนี้ กรุณาออกจากพื้นที่โดยด่วน!</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="card history-card text-start shadow-sm border-0" style="border-radius: 20px; overflow: hidden;">
+            <div class="card-header bg-dark text-white p-3">
+                <span class="fw-bold"><i class="fa-solid fa-clock-rotate-left me-2"></i> <span id="hist-title">ประวัติการตรวจพบแก๊สรั่ว</span></span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-4" id="th-date">วันที่</th>
+                                <th id="th-time">เวลาที่พบ</th>
+                                <th id="th-status">สถานะ</th>
+                                <th id="th-action">การดำเนินการ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="gas-history-table"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="creatorModal" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content shadow-lg border-0" style="border-radius: 25px;">
+                <div class="modal-header border-0 bg-primary text-white" style="border-radius: 25px 25px 0 0;">
+                    <h5 class="fw-bold mb-0"><i class="fa-solid fa-id-card me-2"></i> <span id="modal-creator-title">ประวัติผู้จัดทำ</span></h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="creator-info">
+                                <h6 class="fw-bold text-primary" id="c1-name">นางสาวธิดาทิพย์ ฤกใหญ่</h6>
+                                <p class="mb-1 small"><b>ID:</b> <span id="c1-id">67010974006</span></p>
+                                <p class="mb-1 small"><span id="c-major">สาขาวิชา คอมพิวเตอร์ธุรกิจ</span></p>
+                                <p class="mb-1 small"><span id="c-faculty">คณะ การบัญชีและการจัดการ</span></p>
+                                <p class="mb-0 small"><span id="c-uni">มหาวิทยาลัยมหาสารคาม</span></p>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="creator-info">
+                                <h6 class="fw-bold text-primary" id="c2-name">นางสาวประภัสสร สองคร</h6>
+                                <p class="mb-1 small"><b>ID:</b> <span id="c2-id">67010974009</span></p>
+                                <p class="mb-1 small"><span id="c2-major">สาขาวิชา คอมพิวเตอร์ธุรกิจ</span></p>
+                                <p class="mb-1 small"><span id="c2-faculty">คณะ การบัญชีและการจัดการ</span></p>
+                                <p class="mb-0 small"><span id="c2-uni">มหาวิทยาลัยมหาสารคาม</span></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="bookingModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content p-3 shadow border-0" style="border-radius: 20px;">
+                <div class="modal-header border-0">
+                    <h5 class="fw-bold text-primary"><i class="fa-solid fa-file-pen me-2"></i><span id="mdl-title">ยืนยันการจอง</span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="selected-slot">
+                    <div class="mb-3 text-start">
+                        <label class="form-label small fw-bold" id="lbl-car-id">ทะเบียนรถ</label>
+                        <input type="text" id="car-id" class="form-control" placeholder="กข 1234 กรุงเทพ">
+                    </div>
+                    <div class="mb-3 text-start">
+                        <label class="form-label small fw-bold" id="lbl-arrival-time">เวลาที่จะมาถึงโดยประมาณ</label>
+                        <select id="arrival-time" class="form-select">
+                            <option value="15" id="opt-15">ภายใน 15 นาที</option>
+                            <option value="30" id="opt-30">ภายใน 30 นาที</option>
+                            <option value="45" id="opt-45">ภายใน 45 นาที</option>
+                            <option value="60" id="opt-60">ภายใน 1 ชั่วโมง</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-primary w-100 rounded-pill" onclick="processBooking()" id="btn-confirm">ยืนยัน</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyCUBzXNuOni3jB8qLXDlbySY69TNcIUuyg",
+            authDomain: "smart-parking-iot-fd3c3.firebaseapp.com",
+            databaseURL: "https://smart-parking-iot-fd3c3-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "smart-parking-iot-fd3c3",
+            storageBucket: "smart-parking-iot-fd3c3.firebasestorage.app",
+            messagingSenderId: "128328064605",
+            appId: "1:128328064605:web:dabad467fa1cfbf83b77b4",
+            measurementId: "G-VLCBWDV2DK"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+        const auth = firebase.auth();
+        let lastGasStatus = 0;
+        const bookingModal = new bootstrap.Modal(document.getElementById('bookingModal'));
+
+        const translations = {
+            th: {
+                navCreators: "ผู้จัดทำ", navLang: "ภาษา", btnProfile: "โปรไฟล์", btnLogout: "ออกจากระบบ",
+                mainTitle: "ระบบจองที่จอดรถออนไลน์", modalCreatorTitle: "ประวัติผู้จัดทำ",
+                cMajor: "สาขาวิชา คอมพิวเตอร์ธุรกิจ", cFaculty: "คณะ การบัญชีและการจัดการ", cUni: "มหาวิทยาลัยมหาสารคาม",
+                lblMySlot: "ช่องจอดที่จอง", lblMyCode: "รหัส Booking Code", lblMyCar: "ทะเบียนรถ", lblMyArrival: "เวลาที่จะมาถึง",
+                gasTitle: "!! ตรวจพบอันตราย !!", gasMsg: "ระบบตรวจพบแก๊สรั่วในบริเวณนี้!", histTitle: "ประวัติการตรวจพบแก๊สรั่ว",
+                thDate: "วันที่", thTime: "เวลาที่พบ", thStatus: "สถานะ", thAction: "การดำเนินการ", 
+                mdlTitle: "ยืนยันการจอง", btnConfirm: "ยืนยัน", lblCarId: "ทะเบียนรถ",
+                btnBook: "จอง", btnFull: "เต็ม", btnBooked: "ถูกจอง", btnCancel: "ยกเลิก",
+                userPrefix: "ผู้ใช้งาน : ", lblArrivalTime: "เวลาที่จะมาถึงโดยประมาณ",
+                opt15: "ภายใน 15 นาที", opt30: "ภายใน 30 นาที", opt45: "ภายใน 45 นาที", opt60: "ภายใน 1 ชั่วโมง"
+            },
+            en: {
+                navCreators: "Creators", navLang: "Language", btnProfile: "Profile", btnLogout: "Logout",
+                mainTitle: "Online Smart Parking System", modalCreatorTitle: "Project Creators",
+                cMajor: "Major: Business Computer", cFaculty: "Faculty: Accountancy and Management", cUni: "Mahasarakham University",
+                lblMySlot: "Booked Slot", lblMyCode: "Booking Code", lblMyCar: "License Plate", lblMyArrival: "Arrival Time",
+                gasTitle: "!! DANGER DETECTED !!", gasMsg: "Gas leak detected in this area!", histTitle: "Gas Leak History",
+                thDate: "Date", thTime: "Time", thStatus: "Status", thAction: "Action", 
+                mdlTitle: "Confirm Booking", btnConfirm: "Confirm", lblCarId: "License Plate",
+                btnBook: "Book", btnFull: "Full", btnBooked: "Booked", btnCancel: "Cancel",
+                userPrefix: "User: ", lblArrivalTime: "Estimated Arrival Time",
+                opt15: "Within 15 mins", opt30: "Within 30 mins", opt45: "Within 45 mins", opt60: "Within 1 hour"
+            },
+            cn: {
+                navCreators: "开发团队", navLang: "语言", btnProfile: "个人资料", btnLogout: "登出",
+                mainTitle: "在线智能停车系统", modalCreatorTitle: "开发者简介",
+                cMajor: "专业：商务计算机", cFaculty: "学院：会计与管理学院", cUni: "玛哈沙拉堪大学",
+                lblMySlot: "已订车位", lblMyCode: "预订代码", lblMyCar: "车牌号", lblMyArrival: "到达时间",
+                gasTitle: "!! 检测到危险 !!", gasMsg: "该区域检测到燃气泄漏！", histTitle: "燃气泄漏记录",
+                thDate: "日期", thTime: "时间", thStatus: "状态", thAction: "操作", 
+                mdlTitle: "确认预订", btnConfirm: "确认", lblCarId: "车牌号",
+                btnBook: "预订", btnFull: "已满", btnBooked: "已预订", btnCancel: "取消",
+                userPrefix: "用户 : ", lblArrivalTime: "预计到达时间",
+                opt15: "15分钟内", opt30: "30分钟内", opt45: "45分钟内", opt60: "1小时内"
+            }
+        };
+
+        function changeLang(lang) {
+            const t = translations[lang];
+            document.getElementById('nav-creators').innerText = t.navCreators;
+            document.getElementById('nav-lang').innerText = t.navLang;
+            document.getElementById('btn-profile').innerText = t.btnProfile;
+            document.getElementById('btn-logout').innerText = t.btnLogout;
+            document.getElementById('main-title').innerText = t.mainTitle;
+            document.getElementById('modal-creator-title').innerText = t.modalCreatorTitle;
+            
+            const majors = [document.getElementById('c-major'), document.getElementById('c2-major')];
+            const faculties = [document.getElementById('c-faculty'), document.getElementById('c2-faculty')];
+            const unis = [document.getElementById('c-uni'), document.getElementById('c2-uni')];
+            
+            majors.forEach(el => el.innerText = t.cMajor);
+            faculties.forEach(el => el.innerText = t.cFaculty);
+            unis.forEach(el => el.innerText = t.cUni);
+
+            document.getElementById('lbl-my-slot').innerText = t.lblMySlot;
+            document.getElementById('lbl-my-code').innerText = t.lblMyCode;
+            document.getElementById('lbl-my-car').innerText = t.lblMyCar;
+            document.getElementById('lbl-my-arrival').innerText = t.lblMyArrival;
+            document.getElementById('gas-title').innerText = t.gasTitle;
+            document.getElementById('gas-msg').innerText = t.gasMsg;
+            document.getElementById('hist-title').innerText = t.histTitle;
+            document.getElementById('th-date').innerText = t.thDate;
+            document.getElementById('th-time').innerText = t.thTime;
+            document.getElementById('th-status').innerText = t.thStatus;
+            document.getElementById('th-action').innerText = t.thAction;
+            document.getElementById('mdl-title').innerText = t.mdlTitle;
+            document.getElementById('btn-confirm').innerText = t.btnConfirm;
+            document.getElementById('lbl-car-id').innerText = t.lblCarId;
+            document.getElementById('lbl-arrival-time').innerText = t.lblArrivalTime;
+            document.getElementById('opt-15').innerText = t.opt15;
+            document.getElementById('opt-30').innerText = t.opt30;
+            document.getElementById('opt-45').innerText = t.opt45;
+            document.getElementById('opt-60').innerText = t.opt60;
+            
+            localStorage.setItem('selectedLang', lang);
+            if (auth.currentUser) updateUserDisplay(auth.currentUser);
+            loadSlots();
+        }
+
+        auth.onAuthStateChanged(user => {
+            if (!user) window.location.replace("login.html");
+            else {
+                updateUserDisplay(user);
+                db.ref('users/' + user.uid).on('value', snapshot => {
+                    if (snapshot.exists() && snapshot.val().photoURL) {
+                        document.getElementById('nav-profile-img').src = snapshot.val().photoURL;
+                    } else if (user.photoURL) {
+                        document.getElementById('nav-profile-img').src = user.photoURL;
+                    }
+                });
+
+                const savedLang = localStorage.getItem('selectedLang') || 'th';
+                changeLang(savedLang);
+                watchGasSensor();
+                loadGasHistory();
+            }
+        });
+
+        function updateUserDisplay(user) {
+            const lang = localStorage.getItem('selectedLang') || 'th';
+            const prefix = translations[lang].userPrefix;
+            const name = user.displayName || user.email;
+            document.getElementById('user-info').innerText = prefix + name;
+        }
+
+        function watchGasSensor() {
+            const gasAlert = document.getElementById('gas-alert-container');
+            const alarmSound = document.getElementById('alarm-sound');
+            db.ref('gas_status').on('value', (snapshot) => {
+                const status = snapshot.val();
+                if ((status == 1 || status == "1") && lastGasStatus == 0) {
+                    db.ref('gas_leak_history').push({
+                        date: new Date().toLocaleDateString('th-TH'),
+                        time: new Date().toLocaleTimeString('th-TH'),
+                        status: "Danger"
+                    });
+                }
+                lastGasStatus = (status == 1 || status == "1") ? 1 : 0;
+                if (status == 1 || status == "1") {
+                    gasAlert.style.display = 'block';
+                    document.body.classList.add('gas-danger');
+                    alarmSound.play().catch(e => {});
+                } else {
+                    gasAlert.style.display = 'none';
+                    document.body.classList.remove('gas-danger');
+                    alarmSound.pause();
+                }
+            });
+        }
+
+        function loadGasHistory() {
+            db.ref('gas_leak_history').limitToLast(10).on('value', (snapshot) => {
+                const tableBody = document.getElementById('gas-history-table');
+                tableBody.innerHTML = "";
+                const rows = [];
+                snapshot.forEach(child => {
+                    const item = child.val();
+                    rows.push(`<tr><td class="ps-4 text-muted">${item.date}</td><td class="fw-bold text-danger">${item.time}</td><td><span class="badge bg-danger">Danger</span></td><td><small>System Log</small></td></tr>`);
+                });
+                tableBody.innerHTML = rows.reverse().join('');
+            });
+        }
+
+        function loadSlots() {
+            const lang = localStorage.getItem('selectedLang') || 'th';
+            const t = translations[lang];
+
+            db.ref('parking_slots').on('value', (snapshot) => {
+                const slots = snapshot.val();
+                const container = document.getElementById('parking-container');
+                container.innerHTML = "";
+                let hasBooking = false;
+                ['slot_01', 'slot_02', 'slot_03', 'slot_04'].forEach(key => {
+                    const data = slots?.[key] || { status: 'available' };
+                    let isMine = (data.status === 'booked' && data.user_email === auth.currentUser.email);
+                    if (isMine) {
+                        hasBooking = true;
+                        document.getElementById('my-slot').innerText = key.toUpperCase().replace('_', ' ');
+                        document.getElementById('my-code').innerText = data.booking_code;
+                        document.getElementById('my-car-id').innerText = data.car_id;
+                        document.getElementById('my-arrival-time').innerText = data.arrival_time + " min";
+                    }
+
+                    let btn = `<button onclick="openBookingModal('${key}')" class="btn btn-primary w-100 rounded-pill">${t.btnBook}</button>`;
+                    
+                    if (data.status === 'occupied') {
+                        btn = `<button class="btn btn-light w-100 rounded-pill" disabled>${t.btnFull}</button>`;
+                    } else if (data.status === 'booked') {
+                        btn = isMine 
+                            ? `<button onclick="cancelBooking('${key}')" class="btn btn-danger w-100 rounded-pill">${t.btnCancel}</button>` 
+                            : `<button class="btn btn-light w-100 rounded-pill" disabled>${t.btnBooked}</button>`;
+                    }
+
+                    container.innerHTML += `<div class="col-6 col-md-3"><div class="card parking-card p-3"><small class="fw-bold text-muted">${key.toUpperCase().replace('_', ' ')}</small><i class="fa-solid fa-car-side fa-3x my-3 ${data.status === 'available' ? 'status-available' : 'text-secondary'}"></i>${btn}</div></div>`;
+                });
+                document.getElementById('my-booking-status').style.display = hasBooking ? "block" : "none";
+            });
+        }
+
+        function openBookingModal(id) { document.getElementById('selected-slot').value = id; bookingModal.show(); }
+        
+        // --- ส่วนที่แก้ไข: เพิ่มการตรวจสอบการจองซ้ำ (1 บัญชี : 1 สิทธิ์) ---
+        function processBooking() {
+            const carId = document.getElementById('car-id').value;
+            const arrivalTime = document.getElementById('arrival-time').value;
+            const slotId = document.getElementById('selected-slot').value;
+            const currentUserEmail = auth.currentUser.email;
+            
+            if (!carId) return alert("กรุณาใส่ทะเบียน");
+
+            // ดึงข้อมูลช่องจอดทั้งหมดมาเช็คก่อนว่าผู้ใช้คนนี้มีการจองไว้ที่อื่นหรือยัง
+            db.ref('parking_slots').once('value').then(snapshot => {
+                const slots = snapshot.val();
+                let alreadyHasBooking = false;
+
+                if (slots) {
+                    Object.keys(slots).forEach(key => {
+                        if (slots[key].user_email === currentUserEmail && slots[key].status === 'booked') {
+                            alreadyHasBooking = true;
+                        }
+                    });
+                }
+
+                if (alreadyHasBooking) {
+                    alert("คุณมีการจองค้างไว้อยู่แล้ว 1 ช่องจอด! ไม่สามารถจองเพิ่มได้");
+                    bookingModal.hide();
+                    return; // หยุดการทำงาน
+                }
+
+                // ถ้ายังไม่มีการจอง ให้ดำเนินการต่อได้
+                const bookingCode = Math.floor(100000 + Math.random() * 900000).toString();
+                const now = new Date();
+                const dd = now.getDate().toString().padStart(2, '0');
+                const mm = (now.getMonth() + 1).toString().padStart(2, '0');
+                const yyyy = now.getFullYear();
+                const dateStr = `${yyyy}-${mm}-${dd}`;
+                const timeStr = now.toLocaleTimeString('th-TH');
+
+                const bookingData = {
+                    status: "booked", 
+                    user_email: currentUserEmail, 
+                    booking_code: bookingCode, 
+                    car_id: carId,
+                    arrival_time: arrivalTime,
+                    date: dateStr,
+                    timestamp: timeStr,
+                    slot: slotId
+                };
+
+                db.ref('parking_slots/' + slotId).update(bookingData).then(() => {
+                    db.ref('booking_history').push(bookingData).then(() => {
+                        bookingModal.hide();
+                        document.getElementById('car-id').value = "";
+                        alert("จองสำเร็จ!");
+                    });
+                }).catch(e => alert("เกิดข้อผิดพลาดในการจอง"));
+            });
+        }
+
+        function cancelBooking(id) { 
+            if(confirm("ยกเลิกการจอง?")) {
+                db.ref('parking_slots/' + id).update({ 
+                    status: "available", 
+                    user_email: "", 
+                    booking_code: "", 
+                    car_id: "", 
+                    arrival_time: "",
+                    date: "",
+                    timestamp: ""
+                }); 
+            }
+        }
+        
+        function logout() { auth.signOut().then(() => window.location.replace("login.html")); }
+    </script>
+</body>
+
+</html>
